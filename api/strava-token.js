@@ -14,7 +14,7 @@ export default async function handler(req, res) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         client_id: '207792',
-        client_secret: 'e3a31dd34315546c960d6391c7700d2aff344a3e',
+        client_secret: '7fa12994a92268684fbb9c621c7152443c667f26',
         code,
         grant_type: 'authorization_code'
       })
