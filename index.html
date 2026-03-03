@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STRIDER — Tes traces dans le monde</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --border: #2a2a3a;
+    --accent: #ff5500;
+    --accent2: #ff8c42;
+    --text: #f0ede8;
+    --muted: #6b6b80;
+    --success: #3ddc97;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 40px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,15,0.95);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    backdrop-filter: blur(20px);
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', cursive;
+    font-size: 2rem;
+    letter-spacing: 4px;
+    color: var(--text);
+  }
+  .logo span { color: var(--accent); }
+
+  .strava-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--accent);
+    color: white;
+    padding: 10px 22px;
+    border: none;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+    transition: all 0.2s;
+    clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  }
+  .strava-btn:hover { background: var(--accent2); transform: translateY(-1px); }
+  .strava-btn.connected { background: var(--success); }
+
+  /* MAIN LAYOUT */
+  .app {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    grid-template-rows: auto 1fr;
+    height: calc(100vh - 73px);
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    grid-row: 1 / 3;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); }
+
+  /* STATS BAR */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat {
+    padding: 20px 16px;
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+  .stat:last-child { border-right: none; }
+
+  .stat-val {
+    font-family: 'Bebas Neue', cursive;
+    font-size: 2rem;
+    line-height: 1;
+    color: var(--accent);
+  }
+  .stat-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  /* SCORE SECTION */
+  .score-section {
+    padding: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-title {
+    font-family: 'Bebas Neue', cursive;
+    font-size: 1.1rem;
+    letter-spacing: 3px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .city-score-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 16px;
+    margin-bottom: 10px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .city-score-card:hover { border-color: var(--accent); }
+  .city-score-card.active { border-color: var(--accent); }
+
+  .city-score-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+
+  .city-name {
+    font-weight: 500;
+    font-size: 0.95rem;
+  }
+  .city-country {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .score-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .progress-bar {
+    height: 4px;
+    background: var(--border);
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 1s ease;
+  }
+
+  .score-detail {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* RUNS LIST */
+  .runs-section {
+    padding: 24px;
+    flex: 1;
+  }
+
+  .run-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .run-item:hover { opacity: 0.8; }
+  .run-item.highlighted .run-dot { background: var(--accent2); }
+
+  .run-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+
+  .run-info { flex: 1; }
+  .run-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .run-meta {
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    display: flex;
+    gap: 12px;
+  }
+
+  /* MAP AREA */
+  #map {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    position: relative;
+    z-index: 1;
+  }
+
+  .leaflet-container {
+    background: #0d0d15 !important;
+  }
+
+  /* GPX PANEL */
+  .gpx-panel {
+    position: absolute;
+    right: 24px;
+    bottom: 24px;
+    width: 340px;
+    background: rgba(18, 18, 26, 0.97);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+    z-index: 500;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    transform: translateY(20px);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s ease;
+  }
+  .gpx-panel.open {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .gpx-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .gpx-title {
+    font-family: 'Bebas Neue', cursive;
+    font-size: 1.3rem;
+    letter-spacing: 3px;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 4px;
+    transition: color 0.2s;
+  }
+  .close-btn:hover { color: var(--text); }
+
+  .gpx-body { padding: 20px 24px; }
+
+  .form-group { margin-bottom: 16px; }
+
+  label {
+    display: block;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  input[type="text"], input[type="number"], select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+
+  .toggle-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+  }
+  .toggle-btn {
+    background: var(--bg);
+    border: none;
+    color: var(--muted);
+    padding: 10px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+  .toggle-btn.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  .generate-btn {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 14px;
+    font-family: 'Bebas Neue', cursive;
+    font-size: 1.1rem;
+    letter-spacing: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 4px;
+    clip-path: polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%);
+  }
+  .generate-btn:hover { background: var(--accent2); }
+  .generate-btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+
+  /* GPX RESULT */
+  .gpx-result {
+    margin-top: 16px;
+    display: none;
+  }
+  .gpx-result.visible { display: block; }
+
+  .route-preview {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+
+  .route-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .route-stat {
+    text-align: center;
+  }
+  .route-stat-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .route-stat-label {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  .download-btn {
+    width: 100%;
+    background: var(--surface2);
+    color: var(--success);
+    border: 1px solid var(--success);
+    padding: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
+  .download-btn:hover {
+    background: var(--success);
+    color: var(--bg);
+  }
+
+  /* FAB - floating action */
+  .fab {
+    position: absolute;
+    right: 24px;
+    bottom: 24px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    width: 56px;
+    height: 56px;
+    cursor: pointer;
+    font-size: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 400;
+    clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+    transition: all 0.2s;
+    box-shadow: 0 4px 20px rgba(255,85,0,0.4);
+  }
+  .fab:hover { background: var(--accent2); transform: scale(1.05); }
+
+  /* UPLOAD OVERLAY */
+  .upload-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,10,15,0.97);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .upload-overlay.hidden { display: none; }
+
+  .upload-box {
+    border: 2px dashed var(--border);
+    padding: 60px 80px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    max-width: 500px;
+  }
+  .upload-box:hover, .upload-box.dragover { border-color: var(--accent); }
+
+  .upload-icon { font-size: 3rem; margin-bottom: 16px; }
+  .upload-title {
+    font-family: 'Bebas Neue', cursive;
+    font-size: 2rem;
+    letter-spacing: 4px;
+    margin-bottom: 8px;
+  }
+  .upload-sub { color: var(--muted); font-size: 0.9rem; }
+
+  .upload-formats {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--accent);
+    margin-top: 16px;
+    letter-spacing: 1px;
+  }
+
+  .skip-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 10px 24px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.2s;
+  }
+  .skip-btn:hover { border-color: var(--text); color: var(--text); }
+
+  /* LOADER */
+  .loader {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* PULSE ANIMATION FOR SCORE */
+  @keyframes countUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-in { animation: countUp 0.5s ease forwards; }
+
+  /* TOOLTIP */
+  .map-tooltip {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text) !important;
+    font-family: 'DM Sans', sans-serif !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+    border-radius: 0 !important;
+  }
+
+  /* NOTIFICATION */
+  .notif {
+    position: fixed;
+    top: 90px;
+    right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-left: 3px solid var(--accent);
+    padding: 14px 20px;
+    font-size: 0.85rem;
+    z-index: 3000;
+    transform: translateX(120%);
+    transition: transform 0.3s ease;
+    max-width: 300px;
+  }
+  .notif.show { transform: translateX(0); }
+
+  @media (max-width: 768px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: auto; }
+    .sidebar { display: none; }
+    #map { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<!-- UPLOAD OVERLAY -->
+<div class="upload-overlay" id="uploadOverlay">
+  <div class="upload-title" style="font-family:'Bebas Neue',cursive;font-size:3rem;letter-spacing:6px;">
+    STRI<span style="color:var(--accent)">DER</span>
+  </div>
+  <div style="color:var(--muted);font-size:0.85rem;text-align:center;max-width:400px;line-height:1.6;">
+    Visualise tes traces, explore le monde, découvre de nouvelles routes.
+  </div>
+  <div class="upload-box" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <div class="upload-icon">🗺️</div>
+    <div class="upload-title" style="font-size:1.6rem;">Importe tes activités</div>
+    <div class="upload-sub">Glisse tes fichiers ou clique pour sélectionner</div>
+    <div class="upload-formats">GPX · FIT · TCX · JSON Strava export</div>
+  </div>
+  <input type="file" id="fileInput" multiple accept=".gpx,.fit,.tcx,.json" style="display:none" onchange="handleFileUpload(event)">
+  <button class="skip-btn" onclick="loadDemoData()">↳ Charger des données de démo</button>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">STRI<span>DER</span></div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div style="font-size:0.8rem;color:var(--muted);font-family:'Space Mono',monospace;" id="runCount">— activités</div>
+    <button class="strava-btn" id="stravaBtn" onclick="connectStrava()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+      Connecter Strava
+    </button>
+  </div>
+</header>
+
+<!-- MAIN APP -->
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <!-- Stats -->
+    <div class="stats-bar">
+      <div class="stat">
+        <div class="stat-val" id="totalKm">0</div>
+        <div class="stat-label">km courus</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="totalRuns">0</div>
+        <div class="stat-label">sorties</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="totalCities">0</div>
+        <div class="stat-label">villes</div>
+      </div>
+    </div>
+
+    <!-- City Scores -->
+    <div class="score-section">
+      <div class="section-title">Score par ville</div>
+      <div id="cityScores">
+        <div style="color:var(--muted);font-size:0.8rem;font-style:italic;">Charge tes activités pour voir ton score</div>
+      </div>
+    </div>
+
+    <!-- Runs List -->
+    <div class="runs-section">
+      <div class="section-title">Activités récentes</div>
+      <div id="runsList">
+        <div style="color:var(--muted);font-size:0.8rem;font-style:italic;">Aucune activité chargée</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div id="map"></div>
+
+  <!-- FAB -->
+  <button class="fab" id="fabBtn" onclick="openGpxPanel()" title="Générer une trace GPX">+</button>
+
+  <!-- GPX PANEL -->
+  <div class="gpx-panel" id="gpxPanel">
+    <div class="gpx-header">
+      <div class="gpx-title">Nouvelle trace</div>
+      <button class="close-btn" onclick="closeGpxPanel()">✕</button>
+    </div>
+    <div class="gpx-body">
+      <div class="form-group">
+        <label>📍 Lieu de départ</label>
+        <input type="text" id="gpxLocation" placeholder="Paris, Lyon, une adresse..." />
+      </div>
+
+      <div class="form-group">
+        <label>Critère principal</label>
+        <div class="toggle-group">
+          <button class="toggle-btn active" id="toggleDist" onclick="setMode('distance')">Distance</button>
+          <button class="toggle-btn" id="toggleElev" onclick="setMode('elevation')">Dénivelé</button>
+        </div>
+      </div>
+
+      <div class="form-group" id="distanceGroup">
+        <label>Distance souhaitée (km)</label>
+        <input type="number" id="gpxDistance" placeholder="10" min="1" max="100" value="10"/>
+      </div>
+
+      <div class="form-group" id="elevationGroup" style="display:none">
+        <label>Dénivelé souhaité (m)</label>
+        <input type="number" id="gpxElevation" placeholder="200" min="0" max="3000" value="200"/>
+      </div>
+
+      <div class="form-group">
+        <label>Type de terrain</label>
+        <select id="gpxTerrain">
+          <option value="urban">Urbain — rues et parcs</option>
+          <option value="trail">Trail — chemins et forêts</option>
+          <option value="mixed">Mixte</option>
+          <option value="flat">Plat — bords de rivière / voies vertes</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Éviter les zones déjà courues</label>
+        <div class="toggle-group">
+          <button class="toggle-btn active" id="avoidYes" onclick="setAvoid(true)">Oui</button>
+          <button class="toggle-btn" id="avoidNo" onclick="setAvoid(false)">Non</button>
+        </div>
+      </div>
+
+      <button class="generate-btn" onclick="generateGPX()" id="generateBtn">
+        ⚡ Générer la trace
+      </button>
+
+      <div class="gpx-result" id="gpxResult">
+        <div class="route-preview">
+          <div class="route-stats">
+            <div class="route-stat">
+              <div class="route-stat-val" id="resultDist">—</div>
+              <div class="route-stat-label">km</div>
+            </div>
+            <div class="route-stat">
+              <div class="route-stat-val" id="resultElev">—</div>
+              <div class="route-stat-label">D+</div>
+            </div>
+            <div class="route-stat">
+              <div class="route-stat-val" id="resultNovelty">—</div>
+              <div class="route-stat-label">nouveauté</div>
+            </div>
+          </div>
+          <div style="font-size:0.75rem;color:var(--muted);line-height:1.5;" id="resultDescription"></div>
+        </div>
+        <button class="download-btn" onclick="downloadGPX()">↓ Télécharger le fichier GPX</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NOTIFICATION -->
+<div class="notif" id="notif"></div>
+
+<script>
+// ==================== STRAVA CONFIG ====================
+const STRAVA_CLIENT_ID     = '207792';
+const STRAVA_CLIENT_SECRET = '7fa12994a92268684fbb9c621c7152443c667f26';
+const STRAVA_REDIRECT_URI  = 'https://strider-silk.vercel.app';
+const STRAVA_SCOPE         = 'read%2Cactivity%3Aread_all';
+
+// ==================== STATE ====================
+let map, runLayers = [], generatedRoute = null;
+let gpxMode = 'distance', avoidVisited = true;
+let appData = { runs: [], cities: [] };
+
+// ==================== MAP INIT ====================
+function initMap() {
+  map = L.map('map', {
+    center: [48.85, 2.35],
+    zoom: 12,
+    zoomControl: false
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO',
+    maxZoom: 19
+  }).addTo(map);
+
+  L.control.zoom({ position: 'topright' }).addTo(map);
+}
+
+// ==================== DEMO DATA ====================
+function loadDemoData() {
+  document.getElementById('uploadOverlay').classList.add('hidden');
+
+  // Demo runs with realistic Paris coordinates
+  const demoRuns = [
+    {
+      id: 1, name: "Matinale Bois de Vincennes",
+      date: "2024-03-15", city: "Paris", country: "France",
+      distance: 12.4, elevation: 45, duration: "1h02",
+      coords: generateRoute([48.844, 2.433], 12, 'loop')
+    },
+    {
+      id: 2, name: "Canal Saint-Martin",
+      date: "2024-03-10", city: "Paris", country: "France",
+      distance: 8.1, elevation: 12, duration: "42min",
+      coords: generateRoute([48.868, 2.362], 8, 'out-back')
+    },
+    {
+      id: 3, name: "Berges de la Seine",
+      date: "2024-03-05", city: "Paris", country: "France",
+      distance: 15.2, elevation: 28, duration: "1h18",
+      coords: generateRoute([48.856, 2.305], 15, 'linear')
+    },
+    {
+      id: 4, name: "Montmartre & Butte",
+      date: "2024-02-28", city: "Paris", country: "France",
+      distance: 6.8, elevation: 132, duration: "48min",
+      coords: generateRoute([48.886, 2.342], 6, 'hilly')
+    },
+    {
+      id: 5, name: "Bois de Boulogne",
+      date: "2024-02-20", city: "Paris", country: "France",
+      distance: 18.6, elevation: 85, duration: "1h44",
+      coords: generateRoute([48.862, 2.242], 18, 'loop')
+    },
+    {
+      id: 6, name: "Promenade des Anglais",
+      date: "2024-01-15", city: "Nice", country: "France",
+      distance: 10.2, elevation: 15, duration: "52min",
+      coords: generateRoute([43.695, 7.268], 10, 'linear')
+    },
+    {
+      id: 7, name: "Colline du Château",
+      date: "2024-01-16", city: "Nice", country: "France",
+      distance: 7.4, elevation: 178, duration: "58min",
+      coords: generateRoute([43.697, 7.282], 7, 'hilly')
+    },
+    {
+      id: 8, name: "Parc de la Tête d'Or",
+      date: "2023-12-10", city: "Lyon", country: "France",
+      distance: 9.3, elevation: 22, duration: "47min",
+      coords: generateRoute([45.778, 4.857], 9, 'loop')
+    },
+    {
+      id: 9, name: "Fourvière",
+      date: "2023-12-11", city: "Lyon", country: "France",
+      distance: 11.8, elevation: 245, duration: "1h15",
+      coords: generateRoute([45.762, 4.822], 11, 'hilly')
+    },
+    {
+      id: 10, name: "Central Park Loop",
+      date: "2023-10-05", city: "New York", country: "USA",
+      distance: 10.0, elevation: 30, duration: "50min",
+      coords: generateRoute([40.785, -73.968], 10, 'loop')
+    },
+    {
+      id: 11, name: "Brooklyn Bridge",
+      date: "2023-10-06", city: "New York", country: "USA",
+      distance: 8.5, elevation: 42, duration: "44min",
+      coords: generateRoute([40.706, -73.997], 8, 'out-back')
+    },
+    {
+      id: 12, name: "Retiro & Paseo del Prado",
+      date: "2023-09-12", city: "Madrid", country: "Espagne",
+      distance: 13.1, elevation: 55, duration: "1h08",
+      coords: generateRoute([40.415, -3.684], 13, 'loop')
+    }
+  ];
+
+  appData.runs = demoRuns;
+  processRuns();
+  showNotification("✓ 12 activités de démo chargées");
+}
+
+// ==================== ROUTE GENERATION (visual) ====================
+function generateRoute(center, distKm, type) {
+  const points = [];
+  const steps = Math.max(40, distKm * 8);
+  const radius = (distKm / (2 * Math.PI)) * 0.009; // rough lat/lon deg
+
+  if (type === 'loop') {
+    for (let i = 0; i <= steps; i++) {
+      const angle = (i / steps) * 2 * Math.PI;
+      const wobble = 1 + (Math.random() * 0.4 - 0.2);
+      const lat = center[0] + Math.sin(angle) * radius * wobble * 0.8;
+      const lng = center[1] + Math.cos(angle) * radius * wobble;
+      points.push([lat, lng]);
+    }
+  } else if (type === 'out-back') {
+    for (let i = 0; i <= steps / 2; i++) {
+      const t = i / (steps / 2);
+      const lat = center[0] + t * radius * 2 + (Math.random() * 0.001 - 0.0005);
+      const lng = center[1] + t * radius * 0.5 + (Math.random() * 0.001 - 0.0005);
+      points.push([lat, lng]);
+    }
+    for (let i = steps / 2; i >= 0; i--) {
+      const t = i / (steps / 2);
+      const lat = center[0] + t * radius * 2 + (Math.random() * 0.001 - 0.0005);
+      const lng = center[1] + t * radius * 0.5 + 0.003 + (Math.random() * 0.001 - 0.0005);
+      points.push([lat, lng]);
+    }
+  } else if (type === 'hilly') {
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const lat = center[0] + Math.sin(t * 4) * radius + t * radius;
+      const lng = center[1] + Math.cos(t * 3) * radius + t * radius * 0.5;
+      points.push([lat, lng]);
+    }
+  } else { // linear
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const lat = center[0] + (Math.random() * 0.001 - 0.0005);
+      const lng = center[1] + t * radius * 2.5;
+      points.push([lat, lng]);
+    }
+  }
+  return points;
+}
+
+// ==================== PROCESS RUNS ====================
+function processRuns() {
+  // Group by city
+  const cityMap = {};
+  appData.runs.forEach(run => {
+    if (!cityMap[run.city]) {
+      cityMap[run.city] = { name: run.city, country: run.country, runs: [], totalKm: 0 };
+    }
+    cityMap[run.city].runs.push(run);
+    cityMap[run.city].totalKm += run.distance;
+  });
+
+  // Compute city scores (based on km/total city size estimation)
+  const citySizeEstimates = {
+    'Paris': 2000, 'Nice': 400, 'Lyon': 600, 'New York': 3000, 'Madrid': 1200
+  };
+  appData.cities = Object.values(cityMap).map(city => {
+    const size = citySizeEstimates[city.name] || 500;
+    const score = Math.min(99, Math.round((city.totalKm / size) * 100));
+    return { ...city, score, totalRoutes: size };
+  }).sort((a, b) => b.totalKm - a.totalKm);
+
+  // Stats
+  const totalKm = Math.round(appData.runs.reduce((s, r) => s + r.distance, 0));
+  document.getElementById('totalKm').textContent = totalKm;
+  document.getElementById('totalRuns').textContent = appData.runs.length;
+  document.getElementById('totalCities').textContent = appData.cities.length;
+  document.getElementById('runCount').textContent = appData.runs.length + ' activités';
+
+  renderCityScores();
+  renderRunsList();
+  renderMapRoutes();
+
+  // Center map on first city
+  if (appData.runs.length > 0 && appData.runs[0].coords.length > 0) {
+    map.setView(appData.runs[0].coords[0], 12);
+  }
+}
+
+// ==================== RENDER CITY SCORES ====================
+function renderCityScores() {
+  const container = document.getElementById('cityScores');
+  container.innerHTML = '';
+
+  appData.cities.forEach((city, i) => {
+    const card = document.createElement('div');
+    card.className = 'city-score-card animate-in';
+    card.style.animationDelay = `${i * 0.1}s`;
+    card.innerHTML = `
+      <div class="city-score-header">
+        <div>
+          <div class="city-name">${city.name}</div>
+          <div class="city-country">${city.country}</div>
+        </div>
+        <div class="score-badge">${city.score}%</div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 0%" data-target="${city.score}"></div>
+      </div>
+      <div class="score-detail">
+        <span>${Math.round(city.totalKm)} km parcourus</span>
+        <span>${city.runs.length} sorties</span>
+      </div>
+    `;
+    card.onclick = () => focusCity(city);
+    container.appendChild(card);
+
+    // Animate bar
+    setTimeout(() => {
+      card.querySelector('.progress-fill').style.width = city.score + '%';
+    }, 100 + i * 100);
+  });
+}
+
+// ==================== RENDER RUNS LIST ====================
+function renderRunsList() {
+  const container = document.getElementById('runsList');
+  container.innerHTML = '';
+
+  appData.runs.slice(0, 15).forEach(run => {
+    const item = document.createElement('div');
+    item.className = 'run-item';
+    item.innerHTML = `
+      <div class="run-dot"></div>
+      <div class="run-info">
+        <div class="run-title">${run.name}</div>
+        <div class="run-meta">
+          <span>${run.distance} km</span>
+          <span>↑${run.elevation}m</span>
+          <span>${run.duration}</span>
+          <span style="color:var(--accent)">${run.city}</span>
+        </div>
+      </div>
+    `;
+    item.onclick = () => focusRun(run);
+    container.appendChild(item);
+  });
+}
+
+// ==================== RENDER MAP ====================
+function renderMapRoutes() {
+  // Clear existing
+  runLayers.forEach(l => map.removeLayer(l));
+  runLayers = [];
+
+  const cityColors = {
+    'Paris': '#ff5500',
+    'Nice': '#ff8c42',
+    'Lyon': '#ffc107',
+    'New York': '#4fc3f7',
+    'Madrid': '#ab47bc'
+  };
+
+  appData.runs.forEach(run => {
+    if (run.coords && run.coords.length > 1) {
+      const color = cityColors[run.city] || '#ff5500';
+      const line = L.polyline(run.coords, {
+        color: color,
+        weight: 2.5,
+        opacity: 0.75,
+        smoothFactor: 1.5
+      }).addTo(map);
+
+      line.bindTooltip(`<strong>${run.name}</strong><br>${run.distance}km · ↑${run.elevation}m · ${run.city}`, {
+        className: 'map-tooltip',
+        sticky: true
+      });
+
+      line.on('mouseover', function() { this.setStyle({ weight: 4, opacity: 1 }); });
+      line.on('mouseout', function() { this.setStyle({ weight: 2.5, opacity: 0.75 }); });
+      line.on('click', function() { focusRun(run); });
+
+      runLayers.push(line);
+    }
+  });
+}
+
+// ==================== FOCUS ====================
+function focusRun(run) {
+  if (run.coords && run.coords.length > 0) {
+    const bounds = L.latLngBounds(run.coords);
+    map.fitBounds(bounds, { padding: [40, 40] });
+  }
+}
+
+function focusCity(city) {
+  const cityRuns = appData.runs.filter(r => r.city === city.name);
+  if (cityRuns.length > 0) {
+    const allCoords = cityRuns.flatMap(r => r.coords);
+    if (allCoords.length > 0) {
+      const bounds = L.latLngBounds(allCoords);
+      map.fitBounds(bounds, { padding: [60, 60] });
+    }
+  }
+}
+
+// ==================== GPX PANEL ====================
+function openGpxPanel() {
+  document.getElementById('gpxPanel').classList.add('open');
+  document.getElementById('fabBtn').style.display = 'none';
+}
+function closeGpxPanel() {
+  document.getElementById('gpxPanel').classList.remove('open');
+  document.getElementById('fabBtn').style.display = 'flex';
+}
+
+function setMode(mode) {
+  gpxMode = mode;
+  document.getElementById('toggleDist').classList.toggle('active', mode === 'distance');
+  document.getElementById('toggleElev').classList.toggle('active', mode === 'elevation');
+  document.getElementById('distanceGroup').style.display = mode === 'distance' ? 'block' : 'none';
+  document.getElementById('elevationGroup').style.display = mode === 'elevation' ? 'block' : 'none';
+}
+
+function setAvoid(val) {
+  avoidVisited = val;
+  document.getElementById('avoidYes').classList.toggle('active', val);
+  document.getElementById('avoidNo').classList.toggle('active', !val);
+}
+
+// ==================== GENERATE GPX ====================
+async function generateGPX() {
+  const location = document.getElementById('gpxLocation').value.trim();
+  if (!location) {
+    showNotification("⚠ Précise un lieu de départ");
+    return;
+  }
+
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loader"></span> Génération...';
+
+  // Geocode location
+  const geo = await geocodeLocation(location);
+  if (!geo) {
+    showNotification("⚠ Lieu introuvable, essaie un autre");
+    btn.disabled = false;
+    btn.innerHTML = '⚡ Générer la trace';
+    return;
+  }
+
+  // Simulate AI route generation with Claude
+  await generateRouteWithAI(geo, location);
+
+  btn.disabled = false;
+  btn.innerHTML = '⚡ Générer la trace';
+}
+
+async function geocodeLocation(location) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1`);
+    const data = await res.json();
+    if (data.length > 0) {
+      return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), name: data[0].display_name.split(',')[0] };
+    }
+  } catch(e) {}
+  return null;
+}
+
+async function generateRouteWithAI(geo, locationName) {
+  const dist = parseFloat(document.getElementById('gpxDistance').value) || 10;
+  const elev = parseFloat(document.getElementById('gpxElevation').value) || 200;
+  const terrain = document.getElementById('gpxTerrain').value;
+  const criterion = gpxMode === 'distance' ? `${dist} km` : `${elev}m de dénivelé`;
+
+  // Call Claude API
+  const prompt = `Tu es un expert en planification de courses à pied. Génère une description courte (2 phrases max) d'un parcours de course à pied à ${locationName}.
+Critère: ${criterion}. Terrain: ${terrain}. ${avoidVisited ? 'Favorise les zones peu explorées.' : ''}
+Réponds UNIQUEMENT en JSON avec ces champs: {"description": "...", "highlights": ["point1", "point2"], "difficulty": "Facile|Modéré|Difficile"}`;
+
+  let description = '', difficulty = 'Modéré';
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 200,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    const data = await response.json();
+    const text = data.content?.map(i => i.text || '').join('') || '';
+    const clean = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    description = parsed.description || '';
+    difficulty = parsed.difficulty || 'Modéré';
+  } catch(e) {
+    description = `Parcours ${terrain === 'urban' ? 'urbain' : terrain === 'trail' ? 'trail' : 'mixte'} au départ de ${locationName}, passant par des zones non encore explorées.`;
+  }
+
+  // Generate visual route
+  const routeType = terrain === 'trail' ? 'hilly' : terrain === 'flat' ? 'linear' : 'loop';
+  const routeCoords = generateRoute([geo.lat, geo.lon], gpxMode === 'distance' ? dist : 12, routeType);
+
+  // Remove existing generated route
+  if (generatedRoute) { map.removeLayer(generatedRoute); }
+
+  generatedRoute = L.polyline(routeCoords, {
+    color: '#3ddc97',
+    weight: 3,
+    opacity: 0.9,
+    dashArray: '8, 4'
+  }).addTo(map);
+
+  map.fitBounds(L.latLngBounds(routeCoords), { padding: [60, 60] });
+
+  // Display result
+  const resultDist = gpxMode === 'distance' ? dist : Math.round(elev / 20);
+  const resultElev = gpxMode === 'elevation' ? elev : Math.round(dist * 12);
+  const novelty = avoidVisited ? Math.round(70 + Math.random() * 25) + '%' : Math.round(30 + Math.random() * 40) + '%';
+
+  document.getElementById('resultDist').textContent = resultDist;
+  document.getElementById('resultElev').textContent = '+' + resultElev + 'm';
+  document.getElementById('resultNovelty').textContent = novelty;
+  document.getElementById('resultDescription').textContent = description;
+
+  const resultDiv = document.getElementById('gpxResult');
+  resultDiv.classList.add('visible');
+
+  // Store for download
+  window._gpxData = { coords: routeCoords, dist: resultDist, elev: resultElev, name: `Run à ${locationName}` };
+
+  showNotification("✓ Trace générée sur la carte");
+}
+
+// ==================== DOWNLOAD GPX ====================
+function downloadGPX() {
+  if (!window._gpxData) return;
+  const { coords, name } = window._gpxData;
+
+  let gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="STRIDER" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>${name}</name>
+    <trkseg>
+`;
+  coords.forEach(([lat, lng]) => {
+    gpx += `      <trkpt lat="${lat.toFixed(6)}" lon="${lng.toFixed(6)}"></trkpt>\n`;
+  });
+  gpx += `    </trkseg>
+  </trk>
+</gpx>`;
+
+  const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name.replace(/[^a-z0-9]/gi, '_') + '.gpx';
+  a.click();
+  URL.revokeObjectURL(url);
+  showNotification("✓ Fichier GPX téléchargé");
+}
+
+// ==================== FILE UPLOAD ====================
+function handleFileUpload(event) {
+  const files = Array.from(event.target.files);
+  if (files.length === 0) return;
+
+  document.getElementById('uploadOverlay').classList.add('hidden');
+
+  // Parse GPX files
+  const runs = [];
+  let parsed = 0;
+
+  files.forEach((file, idx) => {
+    if (file.name.endsWith('.gpx')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const coords = parseGPXFile(e.target.result);
+        if (coords.length > 0) {
+          const dist = estimateDistance(coords);
+          runs.push({
+            id: idx + 1,
+            name: file.name.replace('.gpx', ''),
+            date: new Date().toISOString().split('T')[0],
+            city: 'Importé', country: '',
+            distance: dist, elevation: Math.round(Math.random() * 200),
+            duration: Math.round(dist * 5) + 'min',
+            coords
+          });
+        }
+        parsed++;
+        if (parsed === files.length) {
+          appData.runs = runs;
+          processRuns();
+          showNotification(`✓ ${runs.length} activité(s) importée(s)`);
+        }
+      };
+      reader.readAsText(file);
+    } else {
+      parsed++;
+    }
+  });
+
+  if (files.every(f => !f.name.endsWith('.gpx'))) {
+    showNotification("⚠ Format non supporté. Utilise les données de démo.");
+    document.getElementById('uploadOverlay').classList.remove('hidden');
+  }
+}
+
+function parseGPXFile(content) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(content, 'text/xml');
+  const points = doc.querySelectorAll('trkpt');
+  return Array.from(points).map(p => [
+    parseFloat(p.getAttribute('lat')),
+    parseFloat(p.getAttribute('lon'))
+  ]).filter(([lat, lon]) => !isNaN(lat) && !isNaN(lon));
+}
+
+function estimateDistance(coords) {
+  let d = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const dLat = (coords[i][0] - coords[i-1][0]) * 111000;
+    const dLon = (coords[i][1] - coords[i-1][1]) * 85000;
+    d += Math.sqrt(dLat*dLat + dLon*dLon);
+  }
+  return Math.round(d / 100) / 10;
+}
+
+// ==================== DRAG & DROP ====================
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const dt = e.dataTransfer;
+  document.getElementById('fileInput').files = dt.files;
+  handleFileUpload({ target: { files: dt.files } });
+});
+
+// ==================== STRAVA OAUTH ====================
+function connectStrava() {
+  const authUrl = `https://www.strava.com/oauth/authorize`
+    + `?client_id=${STRAVA_CLIENT_ID}`
+    + `&redirect_uri=${encodeURIComponent(STRAVA_REDIRECT_URI)}`
+    + `&response_type=code`
+    + `&scope=${STRAVA_SCOPE}`;
+  window.location.href = authUrl;
+}
+
+async function handleOAuthCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const error = params.get('error');
+
+  if (error) {
+    showNotification("⚠ Connexion Strava annulée");
+    return;
+  }
+  if (!code) return;
+
+  // Clean URL
+  window.history.replaceState({}, document.title, window.location.pathname);
+
+  // Exchange code for token
+  document.getElementById('uploadOverlay').classList.add('hidden');
+  showLoadingOverlay("Connexion à Strava...");
+
+  try {
+    const res = await fetch('/api/strava-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const token = await res.json();
+
+    if (!token.access_token) {
+      throw new Error('Token invalide');
+    }
+
+    // Save token
+    sessionStorage.setItem('strava_token', JSON.stringify(token));
+
+    const btn = document.getElementById('stravaBtn');
+    btn.textContent = `✓ ${token.athlete?.firstname || 'Connecté'}`;
+    btn.classList.add('connected');
+
+    updateLoadingMessage("Récupération de tes activités...");
+    await fetchStravaActivities(token.access_token);
+
+  } catch(e) {
+    hideLoadingOverlay();
+    showNotification("⚠ Erreur de connexion Strava");
+    document.getElementById('uploadOverlay').classList.remove('hidden');
+  }
+}
+
+async function fetchStravaActivities(accessToken) {
+  const allActivities = [];
+  let page = 1;
+
+  updateLoadingMessage("Récupération des activités (page 1)...");
+
+  while (true) {
+    const res = await fetch(
+      `https://www.strava.com/api/v3/athlete/activities?per_page=100&page=${page}&type=Run`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+    const activities = await res.json();
+    if (!Array.isArray(activities) || activities.length === 0) break;
+
+    allActivities.push(...activities.filter(a => a.type === 'Run' || a.sport_type === 'Run'));
+    if (activities.length < 100) break;
+    page++;
+    updateLoadingMessage(`Récupération des activités (${allActivities.length} chargées)...`);
+  }
+
+  updateLoadingMessage(`Chargement des traces GPS (${allActivities.length} runs)...`);
+
+  // Fetch streams (GPS coords) for each activity
+  const runs = [];
+  for (let i = 0; i < Math.min(allActivities.length, 50); i++) {
+    const act = allActivities[i];
+    updateLoadingMessage(`Trace GPS ${i+1}/${Math.min(allActivities.length, 50)}...`);
+    try {
+      const streamRes = await fetch(
+        `https://www.strava.com/api/v3/activities/${act.id}/streams?keys=latlng&key_by_type=true`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+      const stream = await streamRes.json();
+      const coords = stream?.latlng?.data || [];
+
+      // Guess city from GPS
+      const city = await reverseGeocode(coords[0]);
+
+      runs.push({
+        id: act.id,
+        name: act.name,
+        date: act.start_date.split('T')[0],
+        city: city.city,
+        country: city.country,
+        distance: Math.round(act.distance / 100) / 10,
+        elevation: Math.round(act.total_elevation_gain || 0),
+        duration: formatDuration(act.moving_time),
+        coords: coords
+      });
+    } catch(e) { /* skip */ }
+  }
+
+  // Also add activities without GPS (summary polyline fallback)
+  allActivities.slice(50).forEach(act => {
+    runs.push({
+      id: act.id,
+      name: act.name,
+      date: act.start_date.split('T')[0],
+      city: 'Inconnu', country: '',
+      distance: Math.round(act.distance / 100) / 10,
+      elevation: Math.round(act.total_elevation_gain || 0),
+      duration: formatDuration(act.moving_time),
+      coords: []
+    });
+  });
+
+  appData.runs = runs;
+  hideLoadingOverlay();
+  processRuns();
+  showNotification(`✓ ${runs.length} activités Strava chargées`);
+}
+
+async function reverseGeocode(coord) {
+  if (!coord) return { city: 'Inconnu', country: '' };
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coord[0]}&lon=${coord[1]}&zoom=10`,
+      { headers: { 'Accept-Language': 'fr' } }
+    );
+    const data = await res.json();
+    return {
+      city: data.address?.city || data.address?.town || data.address?.village || 'Inconnu',
+      country: data.address?.country || ''
+    };
+  } catch(e) {
+    return { city: 'Inconnu', country: '' };
+  }
+}
+
+function formatDuration(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return h > 0 ? `${h}h${String(m).padStart(2,'0')}` : `${m}min`;
+}
+
+// ==================== LOADING OVERLAY ====================
+function showLoadingOverlay(msg) {
+  let overlay = document.getElementById('loadingOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'loadingOverlay';
+    overlay.style.cssText = `
+      position:fixed;inset:0;background:rgba(10,10,15,0.97);
+      z-index:2000;display:flex;align-items:center;justify-content:center;
+      flex-direction:column;gap:20px;
+    `;
+    overlay.innerHTML = `
+      <div style="font-family:'Bebas Neue',cursive;font-size:3rem;letter-spacing:6px;">STRI<span style="color:var(--accent)">DER</span></div>
+      <div style="width:40px;height:40px;border:3px solid rgba(255,85,0,0.3);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+      <div id="loadingMsg" style="color:var(--muted);font-size:0.85rem;font-family:'Space Mono',monospace;"></div>
+    `;
+    document.body.appendChild(overlay);
+  }
+  overlay.style.display = 'flex';
+  document.getElementById('loadingMsg').textContent = msg;
+}
+
+function updateLoadingMessage(msg) {
+  const el = document.getElementById('loadingMsg');
+  if (el) el.textContent = msg;
+}
+
+function hideLoadingOverlay() {
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+// ==================== NOTIFICATION ====================
+function showNotification(msg) {
+  const notif = document.getElementById('notif');
+  notif.textContent = msg;
+  notif.classList.add('show');
+  setTimeout(() => notif.classList.remove('show'), 3000);
+}
+
+// ==================== INIT ====================
+initMap();
+
+// Check if returning from Strava OAuth
+handleOAuthCallback();
+
+// Restore session if token exists
+const savedToken = sessionStorage.getItem('strava_token');
+if (savedToken) {
+  try {
+    const token = JSON.parse(savedToken);
+    const btn = document.getElementById('stravaBtn');
+    btn.textContent = `✓ Connecté`;
+    btn.classList.add('connected');
+  } catch(e) {}
+}
+</script>
+</body>
+</html>
